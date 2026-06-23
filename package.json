@@ -1,0 +1,12 @@
+{
+  "name": "n8n-seo-agent",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "push": "bash setup/push.sh",
+    "deploy": "node setup/deploy-workflows.js",
+    "scrub": "node setup/scrub-creds.js",
+    "restore": "node setup/restore-creds.js",
+    "dev": "cd frontend && npm run dev"
+  }
+}
