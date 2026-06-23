@@ -1,0 +1,174 @@
+{
+  "name": "01 - Content Pipeline",
+  "nodes": [
+    {
+      "id": "pipe-trigger",
+      "name": "Pipeline Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "seo-pipeline",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "seo-pipeline",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "pipe-respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [480, 480],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Pipeline started"
+      }
+    },
+    {
+      "id": "pipe-config",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300],
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst incoming = raw.body || raw;\nconst config = {\n  SUPABASE_URL: 'YOUR_SUPABASE_URL',\n  SUPABASE_SERVICE_KEY: 'YOUR_SUPABASE_SERVICE_KEY',\n  ANTHROPIC_API_KEY: 'YOUR_ANTHROPIC_API_KEY',\n  SERPER_API_KEY: 'YOUR_SERPER_API_KEY',\n  GRYNOW_WEBSITE_ID: 'YOUR_GRYNOW_WEBSITE_ID',\n  MYWALL_WEBSITE_ID: 'YOUR_MYWALL_WEBSITE_ID',\n  MEMORY_WEBHOOK_URL: 'http://localhost:5678/webhook/seo-memory',\n  REVIEW_WEBHOOK_URL: 'http://localhost:5678/webhook/seo-review',\n  PIPELINE_WEBHOOK_URL: 'http://localhost:5678/webhook/seo-pipeline',\n};\nreturn [{ json: { ...config, ...incoming } }];"
+      }
+    },
+    {
+      "id": "pipe-runner",
+      "name": "Pipeline Runner",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300],
+      "parameters": {
+        "jsCode": "const fetch=(u,o={})=>new Promise((res,rej)=>{const iH=u.startsWith('https');const lib=require(iH?'https':'http');const m=u.match(/^https?:\\/\\/([^/:]+)(?::(\\d+))?(\\/[^?#]*)?(\\?[^#]*)?/);if(!m)return rej(new Error('Bad URL: '+u));const body=o.body||null;const req=lib.request({hostname:m[1],port:m[2]?+m[2]:(iH?443:80),path:(m[3]||'/')+(m[4]||''),method:o.method||'GET',headers:{...(o.headers||{}),...(body?{'Content-Length':Buffer.byteLength(body)}:{})}},r=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>res({ok:r.statusCode<300,status:r.statusCode,json:()=>Promise.resolve(JSON.parse(d||'null')),text:()=>Promise.resolve(d)}));});req.on('error',rej);if(body)req.write(body);req.end();});\n\nconst cfg = $('Config').first().json;\n\n// Normalise intake — new requests are flat, rework has nested intake object\nconst isFlat = !!cfg.topic;\nconst intake = isFlat ? cfg : (cfg.intake && cfg.intake.topic ? cfg.intake : cfg);\nconst requestId   = cfg.request_id;\nconst startFrom   = cfg.start_from || 'research';\nconst isRework    = cfg.is_rework || false;\nconst reworkFb    = cfg.rework_feedback || null;\nlet websiteId = intake.website_slug === 'grynow' ? cfg.GRYNOW_WEBSITE_ID : cfg.MYWALL_WEBSITE_ID;\n\nconst sbUrl = cfg.SUPABASE_URL;\nconst sbKey = cfg.SUPABASE_SERVICE_KEY;\nconst sbH   = { 'apikey': sbKey, 'Authorization': 'Bearer ' + sbKey, 'Content-Type': 'application/json' };\n\nasync function sbGet(path) {\n  const r = await fetch(sbUrl + '/rest/v1/' + path, { headers: { apikey: sbKey, Authorization: 'Bearer ' + sbKey } });\n  return r.ok ? r.json() : [];\n}\nasync function sbPatch(table, filter, body) {\n  await fetch(`${sbUrl}/rest/v1/${table}?${filter}`, { method: 'PATCH', headers: sbH, body: JSON.stringify(body) });\n}\nasync function claude(system, user, maxTokens) {\n  const r = await fetch('https://api.anthropic.com/v1/messages', {\n    method: 'POST',\n    headers: { 'x-api-key': cfg.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },\n    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: maxTokens || 4096, system, messages: [{ role: 'user', content: user }] })\n  });\n  const d = await r.json();\n  if (!d.content) throw new Error('Claude error: ' + JSON.stringify(d));\n  return d.content[0].text;\n}\nfunction parseJSON(text) {\n  try {\n    const m = text.match(/```json\\s*([\\s\\S]*?)```/) || text.match(/({[\\s\\S]*})/);\n    return JSON.parse(m ? m[1] : text);\n  } catch(e) { return { _parse_error: true, raw: text.substring(0, 300) }; }\n}\n\nlet researchBrief = cfg.research_brief || null;\nlet strategyBrief = cfg.strategy_brief || null;\n\n// Self-fetch intake + briefs when called from Review Handler (rework with no intake passed)\nif (startFrom === 'write' && !intake.topic && requestId) {\n  const rr = await fetch(`${sbUrl}/rest/v1/content_requests?id=eq.${requestId}&select=*,websites(slug,name)`, { headers: { apikey: sbKey, Authorization: 'Bearer '+sbKey } });\n  const rrows = await rr.json();\n  if (rrows && rrows[0]) {\n    const rreq = rrows[0];\n    Object.assign(intake, {\n      website_slug: rreq.websites?.slug || 'grynow',\n      website_name: rreq.websites?.name || 'GryNow',\n      website_url:  rreq.websites?.slug === 'grynow' ? 'https://grynow.in' : 'https://mywall.me',\n      placement: rreq.placement, content_type: rreq.content_type, topic: rreq.topic,\n      keywords: rreq.keywords, keywords_raw: (rreq.keywords||[]).join(', '),\n      layout_notes: rreq.layout_notes||'', additional_brief: rreq.additional_brief||''\n    });\n    researchBrief = researchBrief || rreq.research_brief;\n    strategyBrief = strategyBrief || rreq.strategy_brief;\n  }\n  websiteId = intake.website_slug === 'grynow' ? cfg.GRYNOW_WEBSITE_ID : cfg.MYWALL_WEBSITE_ID;\n}\n\n// ─────────────────────────────────────────────────────────── RESEARCH ──\nif (startFrom !== 'write') {\n  await sbPatch('content_requests', `id=eq.${requestId}`, { status: 'researching' });\n\n  const [kbData, linksData, memData, serp, web] = await Promise.all([\n    sbGet(`knowledge_base?select=category,content&or=(website_id.eq.${websiteId},website_id.is.null)`).catch(()=>[]),\n    sbGet(`internal_links?select=url,title,h1&website_id=eq.${websiteId}&limit=120`).catch(()=>[]),\n    sbGet(`memory_patterns?select=pattern_type,pattern&or=(website_id.eq.${websiteId},website_id.is.null)&order=frequency.desc&limit=20`).catch(()=>[]),\n    fetch('https://google.serper.dev/search', { method:'POST', headers:{'X-API-KEY':cfg.SERPER_API_KEY,'Content-Type':'application/json'}, body: JSON.stringify({q: (intake.keywords||[])[0]+' '+intake.topic, num:10, gl:'in'}) }).then(r=>r.json()).catch(()=>({organic:[]})),\n    fetch('https://google.serper.dev/search', { method:'POST', headers:{'X-API-KEY':cfg.SERPER_API_KEY,'Content-Type':'application/json'}, body: JSON.stringify({q: intake.topic+' statistics facts 2025', num:8}) }).then(r=>r.json()).catch(()=>({organic:[]})),\n  ]);\n\n  const kbTxt    = (Array.isArray(kbData)?kbData:[]).map(d=>`## ${d.category}\\n${d.content}`).join('\\n\\n') || 'No KB yet.';\n  const linksTxt = (Array.isArray(linksData)?linksData:[]).map(l=>`- ${l.url} | ${l.title}`).join('\\n') || 'None yet.';\n  const memTxt   = (Array.isArray(memData)?memData:[]).map(p=>`[${p.pattern_type}] ${p.pattern}`).join('\\n') || 'None yet.';\n  const serpTxt  = (serp.organic||[]).slice(0,8).map((r,i)=>`${i+1}. ${r.title} (${r.link})\\n   ${r.snippet||''}`).join('\\n\\n');\n  const webTxt   = (web.organic||[]).slice(0,6).map(r=>`- ${r.title}: ${r.snippet||''}`).join('\\n');\n\n  const rSys = `You are a Senior SEO Research Analyst for ${intake.website_name}.\\nBusiness KB:\\n${kbTxt}\\nInternal Links:\\n${linksTxt}\\nMemory:\\n${memTxt}`;\n  const rMsg = `Brief: ${intake.content_type} | ${intake.placement} | Topic: ${intake.topic} | Keywords: ${intake.keywords_raw||''}\\nLayout: ${intake.layout_notes||'None'}\\nAdditional: ${intake.additional_brief||'None'}\\n\\nSERP:\\n${serpTxt}\\n\\nWeb Research:\\n${webTxt}\\n\\nReturn ONLY valid JSON:\\n{\"primary_keyword\":\"\",\"search_intent\":\"informational\",\"secondary_keywords\":[],\"lsi_terms\":[],\"competitor_analysis\":[{\"url\":\"\",\"word_count_estimate\":0,\"strengths\":\"\",\"gaps\":\"\"}],\"avg_competitor_word_count\":0,\"topic_facts\":[],\"key_statistics\":[],\"audience_questions\":[],\"internal_links\":[{\"url\":\"\",\"suggested_anchor\":\"\",\"reason\":\"\"}],\"content_gap_angle\":\"\",\"differentiator\":\"\",\"memory_insights\":{\"what_worked\":\"\",\"what_to_avoid\":\"\"},\"research_confidence\":\"high\",\"notes_for_strategist\":\"\"}`;\n\n  researchBrief = parseJSON(await claude(rSys, rMsg, 4096));\n  await sbPatch('content_requests', `id=eq.${requestId}`, { research_brief: researchBrief, status: 'strategizing' });\n\n  // ─────────────────────────────────────────────────────── STRATEGY ──\n  const toneHint = intake.placement === 'on-page' ? 'FIRST PERSON. Brand speaks as \"we\"/\"our\".' : 'THIRD PERSON. Refer to brand by name. Never \"we\".';\n  const sSys = `You are a Senior Content Strategist for ${intake.website_name}. Make firm editorial decisions. Return ONLY valid JSON.`;\n  const sMsg = `${intake.content_type} | ${intake.placement} → ${toneHint}\\nTopic: ${intake.topic}\\nPrimary Keyword: ${researchBrief.primary_keyword||(intake.keywords||[])[0]||''}\\nLayout Notes: ${intake.layout_notes||'None'}\\n\\nResearch Brief:\\n${JSON.stringify(researchBrief,null,2)}\\n\\nReturn ONLY JSON:\\n{\"word_count_target\":0,\"word_count_rationale\":\"\",\"depth\":\"in-depth\",\"depth_rationale\":\"\",\"tone\":\"\",\"outline\":[{\"level\":\"h1\",\"text\":\"\",\"keyword\":\"\",\"notes\":\"\"}],\"keyword_placement_map\":{\"primary_keyword\":{\"locations\":[]},\"secondary_keywords\":[{\"keyword\":\"\",\"section\":\"\"}]},\"internal_links_plan\":[{\"url\":\"\",\"anchor_text\":\"\",\"placement\":\"\"}],\"content_angle\":\"\",\"cta_text\":\"\",\"cta_placement\":\"end\",\"special_instructions\":\"\",\"schema_recommendation\":\"Article\"}`;\n\n  strategyBrief = parseJSON(await claude(sSys, sMsg, 4096));\n  await sbPatch('content_requests', `id=eq.${requestId}`, { strategy_brief: strategyBrief, status: 'drafting' });\n}\n\n// ────────────────────────────────────────────────────────────── WRITE ──\nconst versionsRes = await sbGet(`content_versions?select=version_number&request_id=eq.${requestId}&order=version_number.desc&limit=1`);\nconst versionNumber = (Array.isArray(versionsRes)&&versionsRes.length) ? versionsRes[0].version_number+1 : 1;\n\nconst [kbW, patW, samW] = await Promise.all([\n  sbGet(`knowledge_base?select=category,content&or=(website_id.eq.${websiteId},website_id.is.null)`).catch(()=>[]),\n  sbGet(`memory_patterns?select=pattern_type,pattern&or=(website_id.eq.${websiteId},website_id.is.null)&order=frequency.desc&limit=20`).catch(()=>[]),\n  sbGet(`content_archive?select=topic,content_excerpt&website_id=eq.${websiteId}&content_type=eq.${intake.content_type}&placement=eq.${intake.placement}&order=approved_at.desc&limit=3`).catch(()=>[]),\n]);\n\nconst kbw = {}; (Array.isArray(kbW)?kbW:[]).forEach(d=>{ kbw[d.category]=d.content; });\nconst toneD = intake.placement==='on-page'\n  ? `FIRST PERSON — You ARE ${intake.website_name}. Use \"we\",\"our\",\"us\". Never third person.`\n  : `THIRD PERSON — Authoritative writer. Refer to ${intake.website_name} by name. NEVER \"we\"/\"our\".`;\nconst pos = (Array.isArray(patW)?patW:[]).filter(p=>p.pattern_type==='positive').map(p=>'- '+p.pattern).join('\\n')||'Set the standard.';\nconst neg = (Array.isArray(patW)?patW:[]).filter(p=>p.pattern_type==='negative').map(p=>'- '+p.pattern).join('\\n')||'None yet.';\nconst samp = (Array.isArray(samW)?samW:[]).map(s=>`Topic: ${s.topic}\\nExcerpt: ${s.content_excerpt||''}`).join('\\n\\n---\\n\\n')||'No samples yet.';\nconst reworkSec = isRework&&reworkFb ? `\\n## REWORK\\nFeedback: ${reworkFb.feedback_text}\\nCategory: ${reworkFb.category} | Severity: ${reworkFb.severity}\\n` : '';\n\nconst wSys = `You are a Senior Content Writer for ${intake.website_name}.\\n\\nTONE: ${toneD}\\n\\nBusiness: ${kbw['business-overview']||'Digital platform.'}\\nBrand Voice: ${kbw['brand-voice']||'Professional, clear, value-focused.'}\\nFollow these patterns:\\n${pos}\\nAvoid:\\n${neg}\\nStyle samples:\\n${samp}`;\nconst wMsg = `Write: ${intake.content_type} | ${intake.placement} | ${intake.topic}\\nTarget words: ${(strategyBrief||{}).word_count_target||1000} (±10%)\\nDepth: ${(strategyBrief||{}).depth||'in-depth'}\\n${reworkSec}\\nStrategy Brief:\\n${JSON.stringify(strategyBrief,null,2)}\\n\\nWrite the full ${intake.content_type} in Markdown. Then:\\n\\n---METADATA---\\nword_count: [exact number]\\nmeta_title: [max 60 chars]\\nmeta_description: [max 160 chars]\\nsuggested_url_slug: [hyphenated, max 5 words]\\nschema_type: [Article|HowTo|ItemList|FAQPage]\\n---END METADATA---`;\n\nconst writerRaw = await claude(wSys, wMsg, 8096);\n\nconst metaMatch = writerRaw.match(/\\n?---METADATA---([\\s\\S]*?)---END METADATA---\\n?/);\nconst metaTxt   = metaMatch ? metaMatch[1].trim() : '';\nconst contentMd = writerRaw.replace(/\\n?---METADATA---[\\s\\S]*?---END METADATA---\\n?/,'').trim();\nconst getMeta   = key => { const m = metaTxt.match(new RegExp(key+':\\\\s*(.+)')); return m ? m[1].trim() : ''; };\n\nreturn [{ json: {\n  content_markdown: contentMd,\n  word_count:       parseInt(getMeta('word_count'))||0,\n  meta_title:       getMeta('meta_title'),\n  meta_description: getMeta('meta_description'),\n  url_slug:         getMeta('suggested_url_slug'),\n  schema_type:      getMeta('schema_type'),\n  version_number:   versionNumber,\n  request_id:       requestId,\n  intake, researchBrief, strategyBrief\n}}];"
+      }
+    },
+    {
+      "id": "pipe-save-version",
+      "name": "Save Content Version",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.SUPABASE_URL }}/rest/v1/content_versions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $('Config').first().json.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Config').first().json.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ request_id: $json.request_id, version_number: $json.version_number, content_markdown: $json.content_markdown, word_count: $json.word_count, meta_title: $json.meta_title, meta_description: $json.meta_description, status: 'under_review' }) }}"
+      }
+    },
+    {
+      "id": "pipe-update-status",
+      "name": "Update Status to Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 300],
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Config').first().json.SUPABASE_URL }}/rest/v1/content_requests?id=eq.{{ $('Pipeline Runner').first().json.request_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $('Config').first().json.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Config').first().json.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ status: 'review', current_version: $('Pipeline Runner').first().json.version_number }) }}"
+      }
+    }
+  ],
+  "connections": {
+    "Pipeline Webhook": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Pipeline Runner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pipeline Runner": {
+      "main": [
+        [
+          {
+            "node": "Save Content Version",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Content Version": {
+      "main": [
+        [
+          {
+            "node": "Update Status to Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata"
+  }
+}

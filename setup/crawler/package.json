@@ -1,0 +1,20 @@
+{
+  "name": "seo-content-crawler",
+  "version": "1.0.0",
+  "description": "Internal link crawler for grynow.in and mywall.me",
+  "main": "crawler.js",
+  "scripts": {
+    "crawl:grynow": "node crawler.js --site grynow",
+    "crawl:mywall": "node crawler.js --site mywall",
+    "crawl:all": "node crawler.js --site grynow && node crawler.js --site mywall",
+    "seed-kb": "node seed-knowledge-base.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "cheerio": "^1.0.0",
+    "p-limit": "^3.1.0",
+    "@supabase/supabase-js": "^2.43.1",
+    "dotenv": "^16.4.5",
+    "robots-parser": "^3.0.1"
+  }
+}

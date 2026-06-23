@@ -1,0 +1,282 @@
+{
+  "name": "03 - Review Handler",
+  "nodes": [
+    {
+      "id": "rev-trigger",
+      "name": "Review Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "seo-review",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "seo-review",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "rev-respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [480, 500],
+      "parameters": { "respondWith": "text", "responseBody": "Review received" }
+    },
+    {
+      "id": "rev-config",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300],
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst incoming = raw.body || raw;\nconst config = {\n  SUPABASE_URL: 'YOUR_SUPABASE_URL',\n  SUPABASE_SERVICE_KEY: 'YOUR_SUPABASE_SERVICE_KEY',\n  PIPELINE_WEBHOOK_URL: 'http://localhost:5678/webhook/seo-pipeline',\n  MEMORY_WEBHOOK_URL: 'http://localhost:5678/webhook/seo-memory',\n};\nreturn [{ json: { ...config, ...incoming } }];"
+      }
+    },
+    {
+      "id": "rev-route",
+      "name": "Approve or Rework?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [720, 300],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false, "typeValidation": "loose" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.decision }}",
+              "rightValue": "approve",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "rev-approve-version",
+      "name": "Approve: Update Version",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 160],
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Config').first().json.SUPABASE_URL }}/rest/v1/content_versions?id=eq.{{ $('Config').first().json.version_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $('Config').first().json.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Config').first().json.SUPABASE_SERVICE_KEY }}"
+            },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "{\"status\":\"approved\"}"
+      }
+    },
+    {
+      "id": "rev-approve-request",
+      "name": "Approve: Update Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 160],
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Config').first().json.SUPABASE_URL }}/rest/v1/content_requests?id=eq.{{ $('Config').first().json.request_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $('Config').first().json.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Config').first().json.SUPABASE_SERVICE_KEY }}"
+            },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "{\"status\":\"approved\"}"
+      }
+    },
+    {
+      "id": "rev-approve-memory",
+      "name": "Approve: Trigger Memory",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 160],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.MEMORY_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ type: 'approve', content_version_id: $('Config').first().json.version_id, request_id: $('Config').first().json.request_id }) }}"
+      }
+    },
+    {
+      "id": "rev-rework-version",
+      "name": "Rework: Update Version",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 440],
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Config').first().json.SUPABASE_URL }}/rest/v1/content_versions?id=eq.{{ $('Config').first().json.version_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $('Config').first().json.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Config').first().json.SUPABASE_SERVICE_KEY }}"
+            },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "{\"status\":\"rework_requested\"}"
+      }
+    },
+    {
+      "id": "rev-rework-request",
+      "name": "Rework: Update Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 440],
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Config').first().json.SUPABASE_URL }}/rest/v1/content_requests?id=eq.{{ $('Config').first().json.request_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $('Config').first().json.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Config').first().json.SUPABASE_SERVICE_KEY }}"
+            },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "{\"status\":\"rework\"}"
+      }
+    },
+    {
+      "id": "rev-rework-memory",
+      "name": "Rework: Trigger Memory",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 440],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.MEMORY_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ type: 'rework', content_version_id: $('Config').first().json.version_id, request_id: $('Config').first().json.request_id, feedback: { feedback_text: $('Config').first().json.feedback_text, category: $('Config').first().json.category, severity: $('Config').first().json.severity } }) }}"
+      }
+    },
+    {
+      "id": "rev-rework-pipeline",
+      "name": "Rework: Trigger Pipeline",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 440],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.PIPELINE_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ request_id: $('Config').first().json.request_id, start_from: 'write', is_rework: true, rework_feedback: { feedback_text: $('Config').first().json.feedback_text, category: $('Config').first().json.category, severity: $('Config').first().json.severity } }) }}"
+      }
+    }
+  ],
+  "connections": {
+    "Review Webhook": {
+      "main": [
+        [
+          { "node": "Respond to Webhook", "type": "main", "index": 0 },
+          { "node": "Config", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [[{ "node": "Approve or Rework?", "type": "main", "index": 0 }]]
+    },
+    "Approve or Rework?": {
+      "main": [
+        [{ "node": "Approve: Update Version", "type": "main", "index": 0 }],
+        [{ "node": "Rework: Update Version", "type": "main", "index": 0 }]
+      ]
+    },
+    "Approve: Update Version": {
+      "main": [
+        [{ "node": "Approve: Update Request", "type": "main", "index": 0 }]
+      ]
+    },
+    "Approve: Update Request": {
+      "main": [
+        [{ "node": "Approve: Trigger Memory", "type": "main", "index": 0 }]
+      ]
+    },
+    "Rework: Update Version": {
+      "main": [
+        [{ "node": "Rework: Update Request", "type": "main", "index": 0 }]
+      ]
+    },
+    "Rework: Update Request": {
+      "main": [
+        [{ "node": "Rework: Trigger Memory", "type": "main", "index": 0 }]
+      ]
+    },
+    "Rework: Trigger Memory": {
+      "main": [
+        [{ "node": "Rework: Trigger Pipeline", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" }
+}

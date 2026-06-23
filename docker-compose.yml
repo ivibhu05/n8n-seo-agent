@@ -1,0 +1,51 @@
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: seo-content-writer-n8n
+    ports:
+      - "5678:5678"
+    environment:
+      # n8n core
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=Asia/Kolkata
+      - N8N_SECURE_COOKIE=false
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      - NODE_FUNCTION_ALLOW_BUILTIN=*
+      - NODE_FUNCTION_ALLOW_EXTERNAL=*
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=all
+      - EXECUTIONS_DATA_SAVE_ON_ERROR=all
+      - EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=true
+
+      # Supabase
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+
+      # AI + Search
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - SERPER_API_KEY=${SERPER_API_KEY}
+
+      # Website IDs
+      - GRYNOW_WEBSITE_ID=${GRYNOW_WEBSITE_ID}
+      - MYWALL_WEBSITE_ID=${MYWALL_WEBSITE_ID}
+
+      # Review
+      - SEO_TEAM_EMAIL=${SEO_TEAM_EMAIL}
+
+      # Inter-workflow webhook URLs (fill in .env after importing workflows)
+      - RESEARCH_WEBHOOK_URL=${RESEARCH_WEBHOOK_URL}
+      - STRATEGY_WEBHOOK_URL=${STRATEGY_WEBHOOK_URL}
+      - WRITER_WEBHOOK_URL=${WRITER_WEBHOOK_URL}
+      - MEMORY_WEBHOOK_URL=${MEMORY_WEBHOOK_URL}
+      - REVIEW_FORM_URL=${REVIEW_FORM_URL}
+
+    volumes:
+      - n8n_data:/home/node/.n8n
+    restart: unless-stopped
+
+volumes:
+  n8n_data:

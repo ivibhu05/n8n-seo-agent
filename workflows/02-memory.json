@@ -1,0 +1,137 @@
+{
+  "name": "02 - Memory & Learning",
+  "nodes": [
+    {
+      "id": "mem-trigger",
+      "name": "Memory Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "seo-memory",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "seo-memory",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "mem-respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [480, 480],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Memory processing started"
+      }
+    },
+    {
+      "id": "mem-config",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300],
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst incoming = raw.body || raw;\nconst config = {\n  SUPABASE_URL: 'YOUR_SUPABASE_URL',\n  SUPABASE_SERVICE_KEY: 'YOUR_SUPABASE_SERVICE_KEY',\n  ANTHROPIC_API_KEY: 'YOUR_ANTHROPIC_API_KEY',\n  GRYNOW_WEBSITE_ID: 'YOUR_GRYNOW_WEBSITE_ID',\n  MYWALL_WEBSITE_ID: 'YOUR_MYWALL_WEBSITE_ID',\n};\nreturn [{ json: { ...config, ...incoming } }];"
+      }
+    },
+    {
+      "id": "mem-route",
+      "name": "Approve or Rework?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [720, 300],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.type }}",
+              "rightValue": "approve",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "mem-approve",
+      "name": "Extract Positive Patterns",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 160],
+      "parameters": {
+        "jsCode": "const fetch=(u,o={})=>new Promise((res,rej)=>{const iH=u.startsWith('https');const lib=require(iH?'https':'http');const m=u.match(/^https?:\\/\\/([^/:]+)(?::(\\d+))?(\\/[^?#]*)?(\\?[^#]*)?/);if(!m)return rej(new Error('Bad URL: '+u));const body=o.body||null;const req=lib.request({hostname:m[1],port:m[2]?+m[2]:(iH?443:80),path:(m[3]||'/')+(m[4]||''),method:o.method||'GET',headers:{...(o.headers||{}),...(body?{'Content-Length':Buffer.byteLength(body)}:{})}},r=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>res({ok:r.statusCode<300,status:r.statusCode,json:()=>Promise.resolve(JSON.parse(d||'null')),text:()=>Promise.resolve(d)}));});req.on('error',rej);if(body)req.write(body);req.end();});\n\nconst cfg = $('Config').first().json;\nconst sbUrl = cfg.SUPABASE_URL;\nconst sbKey = cfg.SUPABASE_SERVICE_KEY;\nconst sbH = { apikey: sbKey, Authorization: 'Bearer '+sbKey, 'Content-Type': 'application/json' };\n\n// Fetch content version\nconst r = await fetch(`${sbUrl}/rest/v1/content_versions?select=*,content_requests(*)&id=eq.${cfg.content_version_id}`, { headers: { apikey: sbKey, Authorization: 'Bearer '+sbKey } });\nconst rows = await r.json();\nconst ver = rows[0] || {};\nconst req = ver.content_requests || {};\n\n// Extract patterns with Claude Haiku\nconst haiku = await fetch('https://api.anthropic.com/v1/messages', {\n  method: 'POST',\n  headers: { 'x-api-key': cfg.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },\n  body: JSON.stringify({\n    model: 'claude-haiku-4-5-20251001', max_tokens: 1024,\n    system: 'Extract 3-5 specific, reusable positive writing patterns from approved content. Return ONLY a JSON array.',\n    messages: [{ role: 'user', content: `Content type: ${req.content_type}\\nPlacement: ${req.placement}\\nTopic: ${req.topic}\\n\\nContent (first 2500 chars):\\n${(ver.content_markdown||'').substring(0,2500)}\\n\\nReturn JSON array: [{\"pattern_type\":\"positive\",\"category\":\"tone|structure|keywords|formatting|cta\",\"pattern\":\"specific actionable observation\",\"source\":\"approved_content\",\"applies_to_placement\":\"${req.placement}\",\"applies_to_content_type\":\"${req.content_type}\"}]` }]\n  })\n}).then(r=>r.json());\n\nconst text = haiku.content[0].text;\nlet patterns = [];\ntry {\n  const m = text.match(/```json\\s*([\\s\\S]*?)```/) || text.match(/(\\[[\\s\\S]*\\])/);\n  patterns = JSON.parse(m ? m[1] : text);\n  if (!Array.isArray(patterns)) patterns = [patterns];\n} catch(e) { patterns = []; }\n\n// Save patterns\nif (patterns.length) {\n  await fetch(`${sbUrl}/rest/v1/memory_patterns`, {\n    method: 'POST', headers: sbH,\n    body: JSON.stringify(patterns.map(p => ({ ...p, website_id: req.website_id, frequency: 1 })))\n  });\n}\n\n// Archive content\nawait fetch(`${sbUrl}/rest/v1/content_archive`, {\n  method: 'POST', headers: sbH,\n  body: JSON.stringify({ content_version_id: cfg.content_version_id, request_id: req.id, website_id: req.website_id, placement: req.placement, content_type: req.content_type, topic: req.topic, keywords: req.keywords, word_count: ver.word_count, content_excerpt: (ver.content_markdown||'').substring(0,500), full_content: ver.content_markdown })\n});\n\n// Mark approved\nawait fetch(`${sbUrl}/rest/v1/content_requests?id=eq.${req.id}`, {\n  method: 'PATCH', headers: sbH, body: JSON.stringify({ status: 'approved' })\n});\nawait fetch(`${sbUrl}/rest/v1/content_versions?id=eq.${cfg.content_version_id}`, {\n  method: 'PATCH', headers: sbH, body: JSON.stringify({ status: 'approved' })\n});\n\nreturn [{ json: { done: true, patterns_saved: patterns.length, type: 'approve' } }];"
+      }
+    },
+    {
+      "id": "mem-rework",
+      "name": "Extract Negative Patterns",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 440],
+      "parameters": {
+        "jsCode": "const fetch=(u,o={})=>new Promise((res,rej)=>{const iH=u.startsWith('https');const lib=require(iH?'https':'http');const m=u.match(/^https?:\\/\\/([^/:]+)(?::(\\d+))?(\\/[^?#]*)?(\\?[^#]*)?/);if(!m)return rej(new Error('Bad URL: '+u));const body=o.body||null;const req=lib.request({hostname:m[1],port:m[2]?+m[2]:(iH?443:80),path:(m[3]||'/')+(m[4]||''),method:o.method||'GET',headers:{...(o.headers||{}),...(body?{'Content-Length':Buffer.byteLength(body)}:{})}},r=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>res({ok:r.statusCode<300,status:r.statusCode,json:()=>Promise.resolve(JSON.parse(d||'null')),text:()=>Promise.resolve(d)}));});req.on('error',rej);if(body)req.write(body);req.end();});\n\nconst cfg = $('Config').first().json;\nconst sbUrl = cfg.SUPABASE_URL;\nconst sbKey = cfg.SUPABASE_SERVICE_KEY;\nconst sbH = { apikey: sbKey, Authorization: 'Bearer '+sbKey, 'Content-Type': 'application/json' };\nconst fb = cfg.feedback || {};\n\n// Fetch content version\nconst r = await fetch(`${sbUrl}/rest/v1/content_versions?select=*,content_requests(*)&id=eq.${cfg.content_version_id}`, { headers: { apikey: sbKey, Authorization: 'Bearer '+sbKey } });\nconst rows = await r.json();\nconst ver = rows[0] || {};\nconst req = ver.content_requests || {};\n\n// Extract negative patterns\nconst haiku = await fetch('https://api.anthropic.com/v1/messages', {\n  method: 'POST',\n  headers: { 'x-api-key': cfg.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },\n  body: JSON.stringify({\n    model: 'claude-haiku-4-5-20251001', max_tokens: 1024,\n    system: 'Extract 1-3 specific negative patterns from SEO feedback. Return ONLY a JSON array of actionable rules.',\n    messages: [{ role: 'user', content: `Content type: ${req.content_type}\\nPlacement: ${req.placement}\\nFeedback: ${fb.feedback_text||''}\\nCategory: ${fb.category||''}\\nSeverity: ${fb.severity||'minor'}\\n\\nContent excerpt:\\n${(ver.content_markdown||'').substring(0,1000)}\\n\\nReturn JSON array: [{\"pattern_type\":\"negative\",\"category\":\"${fb.category||'other'}\",\"pattern\":\"instead of X do Y because Z\",\"source\":\"feedback\",\"severity\":\"${fb.severity||'minor'}\",\"applies_to_placement\":\"${req.placement}\",\"applies_to_content_type\":\"${req.content_type}\"}]` }]\n  })\n}).then(r=>r.json());\n\nconst text = haiku.content[0].text;\nlet patterns = [];\ntry {\n  const m = text.match(/```json\\s*([\\s\\S]*?)```/) || text.match(/(\\[[\\s\\S]*\\])/);\n  patterns = JSON.parse(m ? m[1] : text);\n  if (!Array.isArray(patterns)) patterns = [patterns];\n} catch(e) { patterns = []; }\n\nif (patterns.length) {\n  await fetch(`${sbUrl}/rest/v1/memory_patterns`, {\n    method: 'POST', headers: sbH,\n    body: JSON.stringify(patterns.map(p => ({ ...p, website_id: req.website_id, frequency: 1 })))\n  });\n}\n\nreturn [{ json: { done: true, patterns_saved: patterns.length, type: 'rework' } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Memory Webhook": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Approve or Rework?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approve or Rework?": {
+      "main": [
+        [
+          {
+            "node": "Extract Positive Patterns",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Negative Patterns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
