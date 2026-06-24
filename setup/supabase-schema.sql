@@ -52,14 +52,23 @@ CREATE TABLE IF NOT EXISTS knowledge_base (
   website_id  UUID REFERENCES websites(id) ON DELETE CASCADE,  -- NULL = global
   category    TEXT NOT NULL,
   -- categories: business-overview | audience | competitors | brand-voice |
-  --             seo-guidelines | writing-guidelines | on-page-tone | off-page-tone
+  --             seo-guidelines | writing-guidelines | on-page-tone | off-page-tone |
+  --             site-knowledge (per crawled page) | site-overview (synthesised
+  --             from the whole crawl) — both produced by distill-site.js
   title       TEXT NOT NULL,
   content     TEXT NOT NULL,
+  source_url  TEXT,        -- set for crawler-distilled rows; NULL for hand-authored docs
   updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX idx_kb_website_category ON knowledge_base(website_id, category);
 CREATE INDEX idx_kb_content_search ON knowledge_base USING gin(to_tsvector('english', content));
+
+-- One distilled row per (website, source URL) so re-crawls upsert instead of duplicating.
+-- Partial index: hand-authored docs (source_url IS NULL) are exempt and may repeat freely.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_kb_source_url
+  ON knowledge_base(website_id, source_url)
+  WHERE source_url IS NOT NULL;
 
 -- ============================================================
 -- CONTENT REQUESTS (each SEO form submission)
@@ -76,8 +85,8 @@ CREATE TABLE IF NOT EXISTS content_requests (
   additional_brief TEXT,
   status           TEXT NOT NULL DEFAULT 'pending'
                    CHECK (status IN ('pending','researching','strategizing','drafting','review','rework','approved')),
-  research_brief   JSONB,
-  strategy_brief   JSONB,
+  research_brief   JSONB,   -- Content Researcher output: structured per-section research notes
+  strategy_brief   JSONB,   -- Content Planner output: outline, audience, intent, word count, depth, angle, CTA
   current_version  INTEGER DEFAULT 0,
   created_at       TIMESTAMPTZ DEFAULT NOW(),
   updated_at       TIMESTAMPTZ DEFAULT NOW()
@@ -98,16 +107,19 @@ CREATE TABLE IF NOT EXISTS content_versions (
   word_count          INTEGER,
   google_doc_url      TEXT,
   google_doc_id       TEXT,
-  keyword_stats       JSONB,   -- {keyword: count}
-  internal_links_used JSONB,   -- [{url, anchor}]
-  meta_title          TEXT,
-  meta_description    TEXT,
   status              TEXT NOT NULL DEFAULT 'draft'
                       CHECK (status IN ('draft','under_review','approved','rework_requested')),
   created_at          TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX idx_versions_request ON content_versions(request_id);
+
+-- Migration: SEO-only columns removed — keyword stats, internal-link usage, and
+-- meta tags are now owned by the (future) SEO agent, not the content writer.
+ALTER TABLE content_versions DROP COLUMN IF EXISTS keyword_stats;
+ALTER TABLE content_versions DROP COLUMN IF EXISTS internal_links_used;
+ALTER TABLE content_versions DROP COLUMN IF EXISTS meta_title;
+ALTER TABLE content_versions DROP COLUMN IF EXISTS meta_description;
 
 -- ============================================================
 -- SEO FEEDBACK
@@ -236,3 +248,15 @@ LANGUAGE SQL AS $$
   ORDER BY relevance DESC
   LIMIT p_limit;
 $$;
+
+
+-- ============================================================
+-- MIGRATION: site-knowledge support (safe to re-run)
+-- Run this block if knowledge_base already exists without source_url.
+-- ============================================================
+
+ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS source_url TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_kb_source_url
+  ON knowledge_base(website_id, source_url)
+  WHERE source_url IS NOT NULL;

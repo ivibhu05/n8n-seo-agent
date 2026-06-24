@@ -20,7 +20,7 @@ export const STATUS = {
     badge: "bg-blue-50 text-blue-700",
   },
   strategizing: {
-    label: "Strategizing",
+    label: "Planning",
     dot: "bg-indigo-500",
     badge: "bg-indigo-50 text-indigo-700",
   },

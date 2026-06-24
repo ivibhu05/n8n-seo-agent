@@ -7,14 +7,18 @@
     "crawl:grynow": "node crawler.js --site grynow",
     "crawl:mywall": "node crawler.js --site mywall",
     "crawl:all": "node crawler.js --site grynow && node crawler.js --site mywall",
-    "seed-kb": "node seed-knowledge-base.js"
+    "seed-kb": "node seed-knowledge-base.js",
+    "distill:grynow": "node distill-site.js --site grynow",
+    "distill:mywall": "node distill-site.js --site mywall",
+    "distill:all": "node distill-site.js --site grynow && node distill-site.js --site mywall"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.70.1",
+    "@supabase/supabase-js": "^2.43.1",
     "axios": "^1.7.2",
     "cheerio": "^1.0.0",
-    "p-limit": "^3.1.0",
-    "@supabase/supabase-js": "^2.43.1",
     "dotenv": "^16.4.5",
+    "p-limit": "^3.1.0",
     "robots-parser": "^3.0.1"
   }
 }

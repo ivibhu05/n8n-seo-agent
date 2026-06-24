@@ -15,7 +15,6 @@ fs.readFileSync(ENV_PATH, "utf8")
 const REPLACEMENTS = [
   { find: /YOUR_ANTHROPIC_API_KEY/g, replace: env.ANTHROPIC_API_KEY },
   { find: /YOUR_SUPABASE_SERVICE_KEY/g, replace: env.SUPABASE_SERVICE_KEY },
-  { find: /YOUR_SERPER_API_KEY/g, replace: env.SERPER_API_KEY },
   { find: /YOUR_SUPABASE_URL/g, replace: env.SUPABASE_URL },
   { find: /YOUR_GRYNOW_WEBSITE_ID/g, replace: env.GRYNOW_WEBSITE_ID },
   { find: /YOUR_MYWALL_WEBSITE_ID/g, replace: env.MYWALL_WEBSITE_ID },

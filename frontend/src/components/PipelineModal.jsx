@@ -5,8 +5,8 @@ import { CFG, SITE_NAMES } from "../config";
 import StatusBadge from "./StatusBadge";
 
 const TABS = [
-  { key: "research", label: "Research Brief" },
-  { key: "strategy", label: "Strategy Brief" },
+  { key: "research", label: "Research Notes" },
+  { key: "strategy", label: "Content Plan" },
   { key: "content", label: "Written Content" },
   { key: "review", label: "Review" },
 ];
@@ -77,23 +77,6 @@ function ContentView({ version }) {
           · v{version.version_number}
         </span>
       </div>
-
-      {(version.meta_title || version.meta_description) && (
-        <div className="border border-gray-200 rounded-lg p-3 mb-4 space-y-1.5 bg-blue-50/50">
-          {version.meta_title && (
-            <p className="text-xs">
-              <span className="font-semibold text-blue-700">Meta Title:</span>{" "}
-              {version.meta_title}
-            </p>
-          )}
-          {version.meta_description && (
-            <p className="text-xs">
-              <span className="font-semibold text-gray-700">Meta Desc:</span>{" "}
-              {version.meta_description}
-            </p>
-          )}
-        </div>
-      )}
 
       {view === "rendered" ? (
         <div
@@ -327,14 +310,14 @@ export default function PipelineModal({ req, onClose, onRefresh }) {
         return req.research_brief ? (
           <JSONView data={req.research_brief} />
         ) : (
-          <WaitingMsg msg="Research Agent is analysing SERP data, keywords, and topic depth…" />
+          <WaitingMsg msg="Content Researcher is gathering facts, examples, and writer notes for each section…" />
         );
 
       case "strategy":
         return req.strategy_brief ? (
           <JSONView data={req.strategy_brief} />
         ) : req.research_brief ? (
-          <WaitingMsg msg="Strategy Agent is making editorial decisions…" />
+          <WaitingMsg msg="Content Planner is building the outline and editorial plan…" />
         ) : (
           <WaitingMsg msg="Waiting for research to complete first…" />
         );
@@ -343,9 +326,9 @@ export default function PipelineModal({ req, onClose, onRefresh }) {
         return latestVersion?.content_markdown ? (
           <ContentView version={latestVersion} />
         ) : req.strategy_brief ? (
-          <WaitingMsg msg="Writer Agent is generating the content…" />
+          <WaitingMsg msg="Content Writer is drafting the article…" />
         ) : (
-          <WaitingMsg msg="Waiting for strategy to complete first…" />
+          <WaitingMsg msg="Waiting for the content plan to complete first…" />
         );
 
       case "review":

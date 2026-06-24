@@ -10,10 +10,6 @@ const REPLACEMENTS = [
     replace: "YOUR_SUPABASE_SERVICE_KEY",
   },
   {
-    find: /06d6458b4d4f74251c112c6469b39cb1197d6a4b/g,
-    replace: "YOUR_SERPER_API_KEY",
-  },
-  {
     find: /https:\/\/mxqwdhlsefgomxxcnkyl\.supabase\.co/g,
     replace: "YOUR_SUPABASE_URL",
   },
