@@ -32,6 +32,11 @@ services:
       # Website IDs
       - GRYNOW_WEBSITE_ID=${GRYNOW_WEBSITE_ID}
       - MYWALL_WEBSITE_ID=${MYWALL_WEBSITE_ID}
+      - IGYGROW_WEBSITE_ID=${IGYGROW_WEBSITE_ID}
+
+      # Deploy agent (content-deploy-agent webhook)
+      - DEPLOY_WEBHOOK_URL=${DEPLOY_WEBHOOK_URL}
+      - DEPLOY_TOKEN=${DEPLOY_TOKEN}
 
       # Review
       - SEO_TEAM_EMAIL=${SEO_TEAM_EMAIL}

@@ -18,7 +18,9 @@ const REPLACEMENTS = [
   { find: /YOUR_SUPABASE_URL/g, replace: env.SUPABASE_URL },
   { find: /YOUR_GRYNOW_WEBSITE_ID/g, replace: env.GRYNOW_WEBSITE_ID },
   { find: /YOUR_MYWALL_WEBSITE_ID/g, replace: env.MYWALL_WEBSITE_ID },
-];
+  { find: /YOUR_IGYGROW_WEBSITE_ID/g, replace: env.IGYGROW_WEBSITE_ID },
+  { find: /YOUR_DEPLOY_TOKEN/g, replace: env.DEPLOY_TOKEN },
+].filter((r) => r.replace); // skip placeholders with no matching .env value
 
 for (const file of fs.readdirSync(WF_DIR).filter((f) => f.endsWith(".json"))) {
   const fp = path.join(WF_DIR, file);

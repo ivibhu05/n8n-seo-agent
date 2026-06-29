@@ -19,6 +19,7 @@ const { URL } = require("url");
 const SITES = {
   grynow: { slug: "grynow", baseUrl: "https://grynow.in" },
   mywall: { slug: "mywall", baseUrl: "https://mywall.me" },
+  igygrow: { slug: "igygrow", baseUrl: "https://www.igygrow.com" },
 };
 
 const CONFIG = {

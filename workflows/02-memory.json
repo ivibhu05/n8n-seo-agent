@@ -33,7 +33,7 @@
       "typeVersion": 2,
       "position": [480, 300],
       "parameters": {
-        "jsCode": "const raw = $input.first().json;\nconst incoming = raw.body || raw;\nconst config = {\n  SUPABASE_URL: 'YOUR_SUPABASE_URL',\n  SUPABASE_SERVICE_KEY: 'YOUR_SUPABASE_SERVICE_KEY',\n  ANTHROPIC_API_KEY: 'YOUR_ANTHROPIC_API_KEY',\n  GRYNOW_WEBSITE_ID: 'YOUR_GRYNOW_WEBSITE_ID',\n  MYWALL_WEBSITE_ID: 'YOUR_MYWALL_WEBSITE_ID',\n};\nreturn [{ json: { ...config, ...incoming } }];"
+        "jsCode": "const raw = $input.first().json;\nconst incoming = raw.body || raw;\nconst config = {\n  SUPABASE_URL: 'YOUR_SUPABASE_URL',\n  SUPABASE_SERVICE_KEY: 'YOUR_SUPABASE_SERVICE_KEY',\n  ANTHROPIC_API_KEY: 'YOUR_ANTHROPIC_API_KEY',\n  GRYNOW_WEBSITE_ID: 'YOUR_GRYNOW_WEBSITE_ID',\n  MYWALL_WEBSITE_ID: 'YOUR_MYWALL_WEBSITE_ID',\n  IGYGROW_WEBSITE_ID: 'YOUR_IGYGROW_WEBSITE_ID',\n};\nreturn [{ json: { ...config, ...incoming } }];"
       }
     },
     {

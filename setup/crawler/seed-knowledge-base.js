@@ -33,6 +33,7 @@ const KB_DIR = path.resolve(__dirname, "../../knowledge-base");
 const FOLDER_WEBSITE_ENV = {
   grynow: "GRYNOW_WEBSITE_ID",
   mywall: "MYWALL_WEBSITE_ID",
+  igygrow: "IGYGROW_WEBSITE_ID",
 };
 
 // filename stem → knowledge_base category (default: the stem itself)
@@ -138,7 +139,9 @@ async function run(opts) {
     console.log("(--force: placeholder files will be seeded too)");
   if (opts.dryRun) console.log("(--dry-run: no writes)");
 
-  const folders = opts.site ? [opts.site] : ["global", "grynow", "mywall"];
+  const folders = opts.site
+    ? [opts.site]
+    : ["global", ...Object.keys(FOLDER_WEBSITE_ENV)];
 
   let totalSeeded = 0;
   let totalSkipped = 0;
@@ -170,8 +173,9 @@ const opts = {
   force: args.includes("--force"),
   dryRun: args.includes("--dry-run"),
 };
-if (opts.site && !["global", "grynow", "mywall"].includes(opts.site)) {
-  console.error("--site must be one of: global | grynow | mywall");
+const VALID_SITES = ["global", ...Object.keys(FOLDER_WEBSITE_ENV)];
+if (opts.site && !VALID_SITES.includes(opts.site)) {
+  console.error("--site must be one of: " + VALID_SITES.join(" | "));
   process.exit(1);
 }
 

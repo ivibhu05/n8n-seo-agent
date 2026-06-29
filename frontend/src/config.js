@@ -3,9 +3,33 @@ export const CFG = {
   SUPABASE_KEY: import.meta.env.VITE_SUPABASE_KEY,
   GRYNOW_ID: import.meta.env.VITE_GRYNOW_ID,
   MYWALL_ID: import.meta.env.VITE_MYWALL_ID,
+  IGYGROW_ID: import.meta.env.VITE_IGYGROW_ID,
   PIPELINE_WEBHOOK: import.meta.env.VITE_PIPELINE_WEBHOOK,
   MEMORY_WEBHOOK: import.meta.env.VITE_MEMORY_WEBHOOK,
   REVIEW_WEBHOOK: import.meta.env.VITE_REVIEW_WEBHOOK,
+};
+
+// Single source of truth for selectable websites. Add a site here (+ its
+// VITE_<SLUG>_ID env var and a `websites` row) to offer it in the form.
+export const SITES = {
+  grynow: {
+    id: import.meta.env.VITE_GRYNOW_ID,
+    name: "GryNow",
+    url: "https://grynow.in",
+    label: "grynow.in",
+  },
+  mywall: {
+    id: import.meta.env.VITE_MYWALL_ID,
+    name: "MyWall",
+    url: "https://mywall.me",
+    label: "mywall.me",
+  },
+  igygrow: {
+    id: import.meta.env.VITE_IGYGROW_ID,
+    name: "Igygrow",
+    url: "https://www.igygrow.com",
+    label: "igygrow.com",
+  },
 };
 
 export const STATUS = {
@@ -46,7 +70,11 @@ export const STATUS = {
   },
 };
 
-export const SITE_NAMES = { grynow: "grynow.in", mywall: "mywall.me" };
+export const SITE_NAMES = {
+  grynow: "grynow.in",
+  mywall: "mywall.me",
+  igygrow: "igygrow.com",
+};
 export const PIPELINE_STAGES = [
   "researching",
   "strategizing",

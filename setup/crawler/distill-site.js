@@ -33,6 +33,7 @@ const { URL } = require("url");
 const SITES = {
   grynow: { slug: "grynow", baseUrl: "https://grynow.in" },
   mywall: { slug: "mywall", baseUrl: "https://mywall.me" },
+  igygrow: { slug: "igygrow", baseUrl: "https://www.igygrow.com" },
 };
 
 const CONFIG = {
@@ -371,7 +372,10 @@ function writeMarkdownArtifacts(site, nuggets, overview) {
   // Mirror the distilled knowledge into git-tracked markdown for human reference.
   // Lives in a crawled/ subfolder so it stays separate from hand-authored docs
   // (seed-knowledge-base.js only reads top-level files, so it ignores these).
-  const dir = path.resolve(__dirname, `../../knowledge-base/${site.slug}/crawled`);
+  const dir = path.resolve(
+    __dirname,
+    `../../knowledge-base/${site.slug}/crawled`,
+  );
   fs.mkdirSync(dir, { recursive: true });
   const stamp = new Date().toISOString().slice(0, 10);
   const banner =

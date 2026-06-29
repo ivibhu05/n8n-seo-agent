@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS websites (
 
 INSERT INTO websites (slug, name, url) VALUES
   ('grynow', 'GryNow', 'https://grynow.in'),
-  ('mywall', 'MyWall', 'https://mywall.me')
+  ('mywall', 'MyWall', 'https://mywall.me'),
+  ('igygrow', 'Igygrow', 'https://www.igygrow.com')
 ON CONFLICT (slug) DO NOTHING;
 
 -- ============================================================

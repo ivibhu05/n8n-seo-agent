@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { sb } from "../lib/supabase";
-import { CFG, SITE_NAMES } from "../config";
+import { CFG, SITE_NAMES, SITES } from "../config";
 
 const INIT = {
   website: "grynow",
@@ -33,8 +33,8 @@ export default function NewRequestModal({ onClose, onSubmitted }) {
 
     setLoading(true);
     try {
-      const websiteId =
-        form.website === "grynow" ? CFG.GRYNOW_ID : CFG.MYWALL_ID;
+      const site = SITES[form.website];
+      const websiteId = site.id;
       const keywords = form.keywords
         .split(",")
         .map((k) => k.trim())
@@ -62,11 +62,8 @@ export default function NewRequestModal({ onClose, onSubmitted }) {
         body: JSON.stringify({
           request_id: rows.id,
           website_slug: form.website,
-          website_name: form.website === "grynow" ? "GryNow" : "MyWall",
-          website_url:
-            form.website === "grynow"
-              ? "https://grynow.in"
-              : "https://mywall.me",
+          website_name: site.name,
+          website_url: site.url,
           placement: form.placement,
           content_type: form.contentType,
           topic: form.topic.trim(),
@@ -115,8 +112,11 @@ export default function NewRequestModal({ onClose, onSubmitted }) {
                 onChange={set("website")}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                <option value="grynow">grynow.in</option>
-                <option value="mywall">mywall.me</option>
+                {Object.entries(SITES).map(([slug, s]) => (
+                  <option key={slug} value={slug}>
+                    {s.label}
+                  </option>
+                ))}
               </select>
             </div>
             <div>

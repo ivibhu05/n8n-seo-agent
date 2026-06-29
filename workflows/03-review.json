@@ -21,7 +21,10 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [480, 500],
-      "parameters": { "respondWith": "text", "responseBody": "Review received" }
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Review received"
+      }
     },
     {
       "id": "rev-config",
@@ -30,7 +33,7 @@
       "typeVersion": 2,
       "position": [480, 300],
       "parameters": {
-        "jsCode": "const raw = $input.first().json;\nconst incoming = raw.body || raw;\nconst config = {\n  SUPABASE_URL: 'YOUR_SUPABASE_URL',\n  SUPABASE_SERVICE_KEY: 'YOUR_SUPABASE_SERVICE_KEY',\n  PIPELINE_WEBHOOK_URL: 'http://localhost:5678/webhook/seo-pipeline',\n  MEMORY_WEBHOOK_URL: 'http://localhost:5678/webhook/seo-memory',\n};\nreturn [{ json: { ...config, ...incoming } }];"
+        "jsCode": "const raw = $input.first().json;\nconst incoming = raw.body || raw;\nconst config = {\n  SUPABASE_URL: 'YOUR_SUPABASE_URL',\n  SUPABASE_SERVICE_KEY: 'YOUR_SUPABASE_SERVICE_KEY',\n  PIPELINE_WEBHOOK_URL: 'http://localhost:5678/webhook/seo-pipeline',\n  MEMORY_WEBHOOK_URL: 'http://localhost:5678/webhook/seo-memory',\n  DEPLOY_WEBHOOK_URL: 'http://host.docker.internal:7331/deploy',\n  DEPLOY_TOKEN: 'YOUR_DEPLOY_TOKEN',\n};\nreturn [{ json: { ...config, ...incoming } }];"
       }
     },
     {
@@ -41,12 +44,18 @@
       "position": [720, 300],
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": false, "typeValidation": "loose" },
+          "options": {
+            "caseSensitive": false,
+            "typeValidation": "loose"
+          },
           "conditions": [
             {
               "leftValue": "={{ $json.decision }}",
               "rightValue": "approve",
-              "operator": { "type": "string", "operation": "equals" }
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
             }
           ],
           "combinator": "and"
@@ -73,7 +82,10 @@
               "name": "Authorization",
               "value": "=Bearer {{ $('Config').first().json.SUPABASE_SERVICE_KEY }}"
             },
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -102,7 +114,10 @@
               "name": "Authorization",
               "value": "=Bearer {{ $('Config').first().json.SUPABASE_SERVICE_KEY }}"
             },
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -123,7 +138,10 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -152,7 +170,10 @@
               "name": "Authorization",
               "value": "=Bearer {{ $('Config').first().json.SUPABASE_SERVICE_KEY }}"
             },
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -181,7 +202,10 @@
               "name": "Authorization",
               "value": "=Bearer {{ $('Config').first().json.SUPABASE_SERVICE_KEY }}"
             },
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -202,7 +226,10 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -223,13 +250,26 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{ JSON.stringify({ request_id: $('Config').first().json.request_id, start_from: 'write', is_rework: true, rework_feedback: { feedback_text: $('Config').first().json.feedback_text, category: $('Config').first().json.category, severity: $('Config').first().json.severity } }) }}"
+        "body": "={{ JSON.stringify({request_id: $('Config').first().json.request_id, start_from: 'write', is_rework: true, rework_feedback: { feedback_text: $('Config').first().json.feedback_text, category: $('Config').first().json.category, severity: $('Config').first().json.severity } }) }}"
+      }
+    },
+    {
+      "id": "rev-approve-deploy",
+      "name": "Approve: Deploy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1680, 160],
+      "parameters": {
+        "jsCode": "const fetch=(u,o={})=>new Promise((res,rej)=>{const iH=u.startsWith('https');const lib=require(iH?'https':'http');const m=u.match(/^https?:\\/\\/([^/:]+)(?::(\\d+))?(\\/[^?#]*)?(\\?[^#]*)?/);if(!m)return rej(new Error('Bad URL: '+u));const body=o.body||null;const req=lib.request({hostname:m[1],port:m[2]?+m[2]:(iH?443:80),path:(m[3]||'/')+(m[4]||''),method:o.method||'GET',headers:{...(o.headers||{}),...(body?{'Content-Length':Buffer.byteLength(body)}:{})}},r=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>res({ok:r.statusCode<300,status:r.statusCode,json:()=>Promise.resolve(JSON.parse(d||'null')),text:()=>Promise.resolve(d)}));});req.on('error',rej);if(body)req.write(body);req.end();});\n\nconst cfg = $('Config').first().json;\nconst sbUrl = cfg.SUPABASE_URL, sbKey = cfg.SUPABASE_SERVICE_KEY;\nconst sbAuth = { apikey: sbKey, Authorization: 'Bearer ' + sbKey };\n\n// Approved markdown for this version\nconst vr = await fetch(`${sbUrl}/rest/v1/content_versions?id=eq.${cfg.version_id}&select=content_markdown`, { headers: sbAuth });\nconst ver = (await vr.json())[0] || {};\nconst markdown = ver.content_markdown || '';\n\n// Request → website slug (= deploy target) + topic for the commit message\nconst rr = await fetch(`${sbUrl}/rest/v1/content_requests?id=eq.${cfg.request_id}&select=topic,content_type,websites(slug,name)`, { headers: sbAuth });\nconst req = (await rr.json())[0] || {};\nconst slug = req.websites && req.websites.slug;\n\nif (!markdown) throw new Error('Deploy skipped: no content_markdown for version ' + cfg.version_id);\nif (!slug) throw new Error('Deploy skipped: no website slug for request ' + cfg.request_id);\nif (!cfg.DEPLOY_WEBHOOK_URL) throw new Error('Deploy skipped: DEPLOY_WEBHOOK_URL not configured');\n\nconst headers = {'Content-Type': 'application/json','x-deploy-token': cfg.DEPLOY_TOKEN};\nconsole.log('DEPLOY_WEBHOOK_URL:', cfg.DEPLOY_WEBHOOK_URL); console.log('DEPLOY_TOKEN:', cfg.DEPLOY_TOKEN); console.log('HEADERS:', headers);\nconst dr = await fetch(cfg.DEPLOY_WEBHOOK_URL, {\n  method: 'POST', headers,\n  body: JSON.stringify({ target: slug, markdown, message: `Publish: ${req.topic || 'post'} [n8n→deploy-agent]` })\n});\nconst result = await dr.json();\nif (!dr.ok || !result || result.ok === false) {\n  throw new Error('Deploy failed: HTTP ' + dr.status + ' ' + JSON.stringify(result));\n}\nreturn [{ json: { deployed: true, target: slug, repoPath: result.repoPath, url: (result.committed && result.committed.url) || null } }];"
       }
     }
   ],
@@ -237,46 +277,117 @@
     "Review Webhook": {
       "main": [
         [
-          { "node": "Respond to Webhook", "type": "main", "index": 0 },
-          { "node": "Config", "type": "main", "index": 0 }
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Config": {
-      "main": [[{ "node": "Approve or Rework?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Approve or Rework?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Approve or Rework?": {
       "main": [
-        [{ "node": "Approve: Update Version", "type": "main", "index": 0 }],
-        [{ "node": "Rework: Update Version", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Approve: Update Version",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rework: Update Version",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Approve: Update Version": {
       "main": [
-        [{ "node": "Approve: Update Request", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Approve: Update Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Approve: Update Request": {
       "main": [
-        [{ "node": "Approve: Trigger Memory", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Approve: Trigger Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Rework: Update Version": {
       "main": [
-        [{ "node": "Rework: Update Request", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Rework: Update Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Rework: Update Request": {
       "main": [
-        [{ "node": "Rework: Trigger Memory", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Rework: Trigger Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Rework: Trigger Memory": {
       "main": [
-        [{ "node": "Rework: Trigger Pipeline", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Rework: Trigger Pipeline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approve: Trigger Memory": {
+      "main": [
+        [
+          {
+            "node": "Approve: Deploy",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
   "active": false,
-  "settings": { "executionOrder": "v1" }
+  "settings": {
+    "executionOrder": "v1"
+  }
 }
