@@ -41,8 +41,8 @@ CREATE TABLE IF NOT EXISTS internal_links (
   UNIQUE(website_id, url)
 );
 
-CREATE INDEX idx_internal_links_website ON internal_links(website_id);
-CREATE INDEX idx_internal_links_title ON internal_links USING gin(to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(h1, '')));
+CREATE INDEX IF NOT EXISTS idx_internal_links_website ON internal_links(website_id);
+CREATE INDEX IF NOT EXISTS idx_internal_links_title ON internal_links USING gin(to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(h1, '')));
 
 -- ============================================================
 -- KNOWLEDGE BASE (business docs, guidelines, tone guides)
@@ -62,8 +62,8 @@ CREATE TABLE IF NOT EXISTS knowledge_base (
   updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_kb_website_category ON knowledge_base(website_id, category);
-CREATE INDEX idx_kb_content_search ON knowledge_base USING gin(to_tsvector('english', content));
+CREATE INDEX IF NOT EXISTS idx_kb_website_category ON knowledge_base(website_id, category);
+CREATE INDEX IF NOT EXISTS idx_kb_content_search ON knowledge_base USING gin(to_tsvector('english', content));
 
 -- One distilled row per (website, source URL) so re-crawls upsert instead of duplicating.
 -- Partial index: hand-authored docs (source_url IS NULL) are exempt and may repeat freely.
@@ -93,8 +93,8 @@ CREATE TABLE IF NOT EXISTS content_requests (
   updated_at       TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_requests_website ON content_requests(website_id);
-CREATE INDEX idx_requests_status ON content_requests(status);
+CREATE INDEX IF NOT EXISTS idx_requests_website ON content_requests(website_id);
+CREATE INDEX IF NOT EXISTS idx_requests_status ON content_requests(status);
 
 -- ============================================================
 -- CONTENT VERSIONS (each draft / rework iteration)
@@ -113,7 +113,7 @@ CREATE TABLE IF NOT EXISTS content_versions (
   created_at          TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_versions_request ON content_versions(request_id);
+CREATE INDEX IF NOT EXISTS idx_versions_request ON content_versions(request_id);
 
 -- Migration: SEO-only columns removed — keyword stats, internal-link usage, and
 -- meta tags are now owned by the (future) SEO agent, not the content writer.
@@ -139,7 +139,7 @@ CREATE TABLE IF NOT EXISTS seo_feedback (
   created_at          TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_feedback_request ON seo_feedback(request_id);
+CREATE INDEX IF NOT EXISTS idx_feedback_request ON seo_feedback(request_id);
 
 -- ============================================================
 -- MEMORY PATTERNS (self-learning layer)
@@ -159,9 +159,9 @@ CREATE TABLE IF NOT EXISTS memory_patterns (
   updated_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_patterns_website ON memory_patterns(website_id);
-CREATE INDEX idx_patterns_type ON memory_patterns(placement, content_type, pattern_type);
-CREATE INDEX idx_patterns_search ON memory_patterns USING gin(to_tsvector('english', pattern));
+CREATE INDEX IF NOT EXISTS idx_patterns_website ON memory_patterns(website_id);
+CREATE INDEX IF NOT EXISTS idx_patterns_type ON memory_patterns(placement, content_type, pattern_type);
+CREATE INDEX IF NOT EXISTS idx_patterns_search ON memory_patterns USING gin(to_tsvector('english', pattern));
 
 -- ============================================================
 -- APPROVED CONTENT ARCHIVE (memory for writing style)
@@ -183,8 +183,8 @@ CREATE TABLE IF NOT EXISTS content_archive (
   approved_at         TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_archive_website ON content_archive(website_id, placement, content_type);
-CREATE INDEX idx_archive_search ON content_archive USING gin(to_tsvector('english', topic || ' ' || COALESCE(content_excerpt, '')));
+CREATE INDEX IF NOT EXISTS idx_archive_website ON content_archive(website_id, placement, content_type);
+CREATE INDEX IF NOT EXISTS idx_archive_search ON content_archive USING gin(to_tsvector('english', topic || ' ' || COALESCE(content_excerpt, '')));
 
 -- ============================================================
 -- HELPER: auto-update updated_at
@@ -195,10 +195,12 @@ RETURNS TRIGGER AS $$
 BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_requests_updated_at ON content_requests;
 CREATE TRIGGER trg_requests_updated_at
   BEFORE UPDATE ON content_requests
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+DROP TRIGGER IF EXISTS trg_patterns_updated_at ON memory_patterns;
 CREATE TRIGGER trg_patterns_updated_at
   BEFORE UPDATE ON memory_patterns
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
@@ -261,3 +263,39 @@ ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS source_url TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_kb_source_url
   ON knowledge_base(website_id, source_url)
   WHERE source_url IS NOT NULL;
+
+
+-- ============================================================
+-- MIGRATION: Autopilot support (safe to re-run)
+-- Adds the SEO Agent (Stage 0) brief + the autonomous pipeline's stages.
+-- The SEO Agent owns keyword/SERP/metadata/schema/internal-link strategy — the
+-- hole the earlier "SEO-only columns removed" migration deliberately left open.
+-- ============================================================
+
+-- The complete SEO Brief produced by the SEO Agent and consumed by every
+-- downstream stage. See prompts/seo-agent.md for the JSON shape.
+ALTER TABLE content_requests ADD COLUMN IF NOT EXISTS seo_brief JSONB;
+
+-- The original business goal / seed for goal-mode ("rank for <keyword>") intake.
+ALTER TABLE content_requests ADD COLUMN IF NOT EXISTS goal TEXT;
+
+-- Widen the status machine for the autonomous flow. The autopilot moves through:
+--   seo_planning → researching → strategizing → drafting → humanizing
+--   → deploying → published   (rework/review stay for the manual pipeline)
+ALTER TABLE content_requests DROP CONSTRAINT IF EXISTS content_requests_status_check;
+ALTER TABLE content_requests ADD CONSTRAINT content_requests_status_check
+  CHECK (status IN (
+    'pending','seo_planning','researching','strategizing','drafting',
+    'humanizing','review','rework','deploying','approved','published'
+  ));
+
+-- content_versions gains a humanized/published lifecycle + the live URL.
+ALTER TABLE content_versions DROP CONSTRAINT IF EXISTS content_versions_status_check;
+ALTER TABLE content_versions ADD CONSTRAINT content_versions_status_check
+  CHECK (status IN ('draft','under_review','approved','rework_requested','published'));
+
+ALTER TABLE content_versions ADD COLUMN IF NOT EXISTS published_url TEXT;
+ALTER TABLE content_versions ADD COLUMN IF NOT EXISTS thumbnail_url TEXT;
+
+-- content_archive keeps the deployed URL for future internal-link suggestions.
+ALTER TABLE content_archive ADD COLUMN IF NOT EXISTS published_url TEXT;

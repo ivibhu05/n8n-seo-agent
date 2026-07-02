@@ -26,8 +26,15 @@ if (!API_KEY) {
   process.exit(1);
 }
 
-// Activation order: downstream first
-const WORKFLOW_FILES = ["03-review.json", "02-memory.json", "01-pipeline.json"];
+// Activation order: downstream first. 00-autopilot is self-contained (it calls
+// the deploy-agent directly), so its order relative to the manual pipeline
+// doesn't matter — listed last.
+const WORKFLOW_FILES = [
+  "03-review.json",
+  "02-memory.json",
+  "01-pipeline.json",
+  "00-autopilot.json",
+];
 
 async function api(method, endpoint, body) {
   return new Promise((resolve, reject) => {

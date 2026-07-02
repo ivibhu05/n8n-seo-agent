@@ -7,6 +7,8 @@ export const CFG = {
   PIPELINE_WEBHOOK: import.meta.env.VITE_PIPELINE_WEBHOOK,
   MEMORY_WEBHOOK: import.meta.env.VITE_MEMORY_WEBHOOK,
   REVIEW_WEBHOOK: import.meta.env.VITE_REVIEW_WEBHOOK,
+  // Autopilot: one fully-autonomous workflow (SEO → write → humanize → deploy)
+  AUTOPILOT_WEBHOOK: import.meta.env.VITE_AUTOPILOT_WEBHOOK,
 };
 
 // Single source of truth for selectable websites. Add a site here (+ its

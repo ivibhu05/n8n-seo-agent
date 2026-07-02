@@ -47,6 +47,10 @@ const REPLACEMENTS = [
     find: new RegExp(escapeRe(env.DEPLOY_TOKEN), "g"),
     replace: "YOUR_DEPLOY_TOKEN",
   },
+  env.SERPER_API_KEY && {
+    find: new RegExp(escapeRe(env.SERPER_API_KEY), "g"),
+    replace: "YOUR_SERPER_API_KEY",
+  },
 ].filter(Boolean);
 
 for (const file of fs.readdirSync(WF_DIR).filter((f) => f.endsWith(".json"))) {

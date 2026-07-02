@@ -10,9 +10,11 @@ const INIT = {
   keywords: "",
   layoutNotes: "",
   brief: "",
+  keyword: "", // autopilot seed ("rank for <keyword>")
 };
 
 export default function NewRequestModal({ onClose, onSubmitted }) {
+  const [mode, setMode] = useState("autopilot"); // "autopilot" | "manual"
   const [form, setForm] = useState(INIT);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -20,7 +22,42 @@ export default function NewRequestModal({ onClose, onSubmitted }) {
   const set = (field) => (e) =>
     setForm((f) => ({ ...f, [field]: e.target.value }));
 
+  // Autopilot: fire the single autonomous workflow. The workflow's SEO Agent
+  // derives topic/keywords/outline/metadata and creates the content_requests
+  // row itself, so the frontend only needs the keyword + website.
+  async function submitAutopilot() {
+    setError("");
+    if (!form.keyword.trim()) {
+      setError("Keyword is required.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const site = SITES[form.website];
+      await fetch(CFG.AUTOPILOT_WEBHOOK, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keyword: form.keyword.trim(),
+          goal: `rank for ${form.keyword.trim()}`,
+          website_slug: form.website,
+          website_name: site.name,
+          website_url: site.url,
+          placement: form.placement,
+          content_type: form.contentType,
+        }),
+      });
+      await onSubmitted();
+      onClose();
+    } catch (e) {
+      setError("Error: " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function submit() {
+    if (mode === "autopilot") return submitAutopilot();
     setError("");
     if (!form.topic.trim()) {
       setError("Topic is required.");
@@ -91,7 +128,7 @@ export default function NewRequestModal({ onClose, onSubmitted }) {
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
         <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100">
           <h2 className="text-base font-bold text-gray-900">
-            New Content Request
+            {mode === "autopilot" ? "Autopilot — Rank for a Keyword" : "New Content Request"}
           </h2>
           <button
             onClick={onClose}
@@ -102,6 +139,38 @@ export default function NewRequestModal({ onClose, onSubmitted }) {
         </div>
 
         <div className="overflow-y-auto px-6 py-4 space-y-4 flex-1">
+          {/* Mode toggle: fully-autonomous autopilot vs. manual brief */}
+          <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
+            {[
+              ["autopilot", "🚀 Autopilot"],
+              ["manual", "✍️ Manual brief"],
+            ].map(([m, label]) => (
+              <button
+                key={m}
+                onClick={() => {
+                  setMode(m);
+                  setError("");
+                }}
+                className={`flex-1 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  mode === m
+                    ? "bg-white text-blue-700 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {mode === "autopilot" && (
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Give one keyword. The SEO Agent handles keyword research, SERP &
+              competitor analysis, internal links, outline, metadata and schema;
+              the pipeline then writes, humanizes, generates a thumbnail and
+              publishes automatically — no review step.
+            </p>
+          )}
+
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -148,62 +217,81 @@ export default function NewRequestModal({ onClose, onSubmitted }) {
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              Topic <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={form.topic}
-              onChange={set("topic")}
-              placeholder="e.g., Why influencer marketing is important in 2026"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
+          {mode === "autopilot" && (
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Keyword to rank for <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={form.keyword}
+                onChange={set("keyword")}
+                placeholder="e.g., micro influencer marketing"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          )}
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              Keywords <span className="text-red-500">*</span>
-              <span className="text-gray-400 font-normal ml-1">
-                (comma-separated)
-              </span>
-            </label>
-            <input
-              type="text"
-              value={form.keywords}
-              onChange={set("keywords")}
-              placeholder="influencer marketing, creator economy, brand deals"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
+          {mode === "manual" && (
+            <>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Topic <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={form.topic}
+                  onChange={set("topic")}
+                  placeholder="e.g., Why influencer marketing is important in 2026"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              Layout / Structure Notes{" "}
-              <span className="text-gray-400 font-normal">(optional)</span>
-            </label>
-            <textarea
-              value={form.layoutNotes}
-              onChange={set("layoutNotes")}
-              rows={2}
-              placeholder="e.g., Intro → Key Stats → Types of influencers → ROI → CTA"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Keywords <span className="text-red-500">*</span>
+                  <span className="text-gray-400 font-normal ml-1">
+                    (comma-separated)
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  value={form.keywords}
+                  onChange={set("keywords")}
+                  placeholder="influencer marketing, creator economy, brand deals"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              Additional Brief{" "}
-              <span className="text-gray-400 font-normal">(optional)</span>
-            </label>
-            <textarea
-              value={form.brief}
-              onChange={set("brief")}
-              rows={2}
-              placeholder="Target audience, special requirements, tone notes…"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Layout / Structure Notes{" "}
+                  <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <textarea
+                  value={form.layoutNotes}
+                  onChange={set("layoutNotes")}
+                  rows={2}
+                  placeholder="e.g., Intro → Key Stats → Types of influencers → ROI → CTA"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Additional Brief{" "}
+                  <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <textarea
+                  value={form.brief}
+                  onChange={set("brief")}
+                  rows={2}
+                  placeholder="Target audience, special requirements, tone notes…"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </>
+          )}
 
           {error && <p className="text-red-600 text-sm">{error}</p>}
         </div>
@@ -226,6 +314,8 @@ export default function NewRequestModal({ onClose, onSubmitted }) {
                   <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />{" "}
                   Starting pipeline…
                 </>
+              ) : mode === "autopilot" ? (
+                "🚀 Launch Autopilot"
               ) : (
                 "Submit & Start Pipeline"
               )}
