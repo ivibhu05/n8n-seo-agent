@@ -28,6 +28,7 @@ and style reference in its `deploy.config.json`, so GitHub tokens never touch n8
 ## Manual steps to go live for igygrow
 
 ### 1. Supabase — create the website row, grab its id
+
 ```sql
 INSERT INTO websites (slug, name, url)
 VALUES ('igygrow', 'Igygrow', 'https://www.igygrow.com')
@@ -37,19 +38,23 @@ SELECT id, slug FROM websites;   -- copy the igygrow UUID
 ```
 
 ### 2. n8n `.env` (this repo) — add:
+
 ```
 IGYGROW_WEBSITE_ID=<uuid from step 1>
 DEPLOY_WEBHOOK_URL=http://host.docker.internal:7331/deploy
 DEPLOY_TOKEN=<the deploy-agent's DEPLOY_TOKEN>
 ```
+
 `DEPLOY_TOKEN` must equal `DEPLOY_TOKEN` in `deploy-agent/.env`.
 
 ### 3. frontend `.env` — add `VITE_IGYGROW_ID=<uuid>`, then rebuild:
+
 ```
 cd frontend && npm run build
 ```
 
 ### 4. Crawl igygrow into the knowledge base (writer context)
+
 ```
 cd setup/crawler && node distill-site.js --site igygrow
 # optional: fill knowledge-base/igygrow/*.md then:
@@ -57,6 +62,7 @@ node seed-knowledge-base.js --site igygrow
 ```
 
 ### 5. Push workflows to n8n + restart with new env
+
 ```
 node setup/restore-creds.js          # injects real values into workflow JSON
 node setup/deploy-workflows.js        # update + activate workflows
@@ -65,15 +71,18 @@ node setup/scrub-creds.js             # BEFORE committing — strip secrets back
 ```
 
 ### 6. Start the deploy agent (on this Mac, reachable at host.docker.internal:7331)
+
 ```
 cd ../deploy-agent && npm run serve   # uses DEPLOY_TOKEN + IGYGROW_GITHUB_TOKEN
 ```
 
 ### 7. End-to-end test
+
 Create a request in the form for **igygrow.com** → let it draft → **Approve** in
 review → confirm a new file lands in `GrynowDev/igygrow.com/blog/`.
 
 ## Adding the next website later
+
 1. `websites` row (slug) + `<SLUG>_WEBSITE_ID` in `.env` + `VITE_<SLUG>_ID` in frontend `.env`.
 2. Add the site to `frontend/src/config.js` `SITES`, the pipeline/memory Config maps,
    and `setup/crawler/*` `SITES`.
